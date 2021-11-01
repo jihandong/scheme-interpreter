@@ -1,7 +1,7 @@
-#lang scheme
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#lang sicp
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.1 Intepreter Kernel
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Evaluating expression.
 (define (eval exp env)
@@ -19,13 +19,13 @@
          (eval-sequence (begin-actions exp) env))
         ((cond? exp) (eval (cond->if exp) env))
         ((application? exp)
-         (apply (eval (operator exp) env)
+         (my-apply (eval (operator exp) env)
                 (list-of-value (operands exp) env)))
         (else
          (error "Error in eval: unkown expression type" exp))))
 
 ;; applying procedure.
-(define (apply procedure arguments)
+(define (my-apply procedure arguments)
   (cond ((primitive-procedure? procedure)
          (apply-primitive-procedure procedure arguments))
         ((compound-procedure? procedure)
@@ -49,14 +49,14 @@
       (eval (if-alternative exp) env)))
 
 (define (eval-sequence exps env)
-  (if (last-exps? exps) ;return value of last expression.
-      (eval (first-exp exps) env)
-      (eval (first-exp exps) env) (eval-sequence (rest-exps exps) env)))
+  (cond ((last-exps? exps) (eval (first-exp exps) env))
+        (else (eval (first-exp exps) env)
+              (eval-sequence (rest-exps exps) env))))
 
 (define (eval-assignment exp env)
-  (set-variable! (asssignment-variable exp)
-                 (eval (assignment-value exp) env)
-                 env)
+  (set-variable-value! (assignment-variable exp)
+                       (eval (assignment-value exp) env)
+                       env)
   'ok)
 
 (define (eval-definition exp env)
@@ -65,14 +65,14 @@
     env)
   'ok)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.2 Expressions
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; self-evaluating expression.
 (define (self-evaluating? exp)
-  (cond ((number? exp) #t)
-        ((string? exp) #t)
+  (cond ((number? exp) true)
+        ((string? exp) true)
         (else #f)))
 
 ;; variable expression.
@@ -84,9 +84,9 @@
 (define (text-of-quotation exp) (cadr exp))
 
 (define (tagged-list? exp tag)
-  (if (pairs? exp)
+  (if (pair? exp)
       (eq? (car exp) tag)
-      #f))
+      false))
 
 ;; assignment expression.
 (define (assignment? exp) (tagged-list? exp 'set!))
@@ -129,7 +129,7 @@
 (define (if-alternative exp)
   (if (not (null? (cdddr exp))) ;else part can be empty.
       (cadddr exp)
-      #f))
+      false))
 
 (define (make-if predicate consequent alternative)
   (list 'if predicate consequent alternative))
@@ -182,7 +182,7 @@
 
 (define (expand-clauses clauses)
   (if (null? clauses)
-      #f
+      false
       (let ((first (car clauses))
             (rest (cdr clauses)))
         (if (cond-else-clause? first)
@@ -191,16 +191,16 @@
                 (error "Error in cond: else clause isn't last"
                        clauses))
             (make-if (cond-predicate first)
-                     (squence->exp (cond-actions first))
+                     (sequence->exp (cond-actions first))
                      (expand-clauses rest))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.3 Evaluater Data Structure
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (true? x) (not (false? x)))
 
-(define (false? x) (eq? x #f))
+(define (false? x) (eq? x false))
 
 ;; make compound-procedure.
 (define (make-procedure parameters body env)
@@ -223,22 +223,22 @@
 
 (define the-empty-environment '())
 
-(define (make-frame variables values) (cons variables values))
+(define (make-frame variables values) (list variables values))
 
 (define (frame-variables frame) (car frame))
 
-(define (frame-values frame) (cdr frame))
+(define (frame-values frame) (cadr frame))
 
 (define (add-binding-to-frame! var val frame)
-  (set-car! frame (cons var (frame-variables frame)))
-  (set-car! frame (cons val (frame-values frame))))
+  (set-car! (frame-variables frame) var)
+  (set-car! (frame-values frame) val))
 
 (define (extend-environment vars vals base-env)
   (if (= (length vars) (length vals))
       (cons (make-frame vars vals) base-env)
       (error "Error in extend-environment: not equal" vars vals)))
 
-(define (look-variable-value var env)
+(define (lookup-variable-value var env)
   (define (env-loop env)
     (define (scan vars vals)
       (cond ((null? vars) (env-loop (enclosing-environment env)))
@@ -246,7 +246,7 @@
             (else (scan (cdr vars) (cdr vals)))))
     (if (eq? env the-empty-environment)
         (error "Error in look-variable-value: unbound variable" var)
-        (let ((frame (car frame)))
+        (let ((frame (first-frame env)))
           (scan (frame-variables frame) (frame-values frame)))))
   (env-loop env))
 
@@ -258,10 +258,82 @@
             (else (scan (cdr vars) (cdr vals)))))
     (if (eq? env the-empty-environment)
         (error "Error in set-variable-value!: unbound variable" var)
-        (let ((frame (car frame)))
+        (let ((frame (first-frame env)))
           (scan (frame-variables frame) (frame-values frame)))))
   (env-loop env))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (define-variable! var val env)
+  (let ((frame (first-frame env)))
+    (define (scan vars vals)
+      (cond ((null? vars) (add-binding-to-frame! var val frame))
+            ((eq? var (car vars)) (set-car! vals val)) ;set new value.
+            (else (scan (cdr vars) (cdr vals)))))
+    (scan (frame-variables frame) (frame-values frame))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.1.4 Setup
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (primitive-procedure? proc) (tagged-list? proc 'primitive))
+
+(define (primitive-implemention proc) (cadr proc))
+
+(define primitive-procedure
+  (list (list 'car car)
+        (list 'cdr cdr)
+        (list 'cons cons)
+        (list 'null? null?)
+        (list 'eq? eq?)))
+
+(define (primitive-procedure-names)
+  (map car primitive-procedure))
+
+(define (primitive-procedure-objects)
+  (map (lambda (proc) (list 'primitive (cadr proc)))
+       primitive-procedure))
+
+(define (apply-primitive-procedure proc args)
+  (apply (primitive-implemention proc) args)) ;scheme apply
+
+(define (setup-environment)
+  (let ((initial-env (extend-environment (primitive-procedure-names)
+                                         (primitive-procedure-objects)
+                                         the-empty-environment)))
+    (define-variable! 'true true initial-env)
+    (define-variable! 'false false initial-env)
+    initial-env))
+
+(define the-global-environment (setup-environment))
+
+(define input-prompt ";;; my eval input:")
+(define output-prompt ";;; my eval value:")
+
+(define (driver-loop)
+  (prompt-for-input input-prompt)
+  (let ((input (read)))
+    (let ((output (eval input the-global-environment)))
+      (announce-output output-prompt)
+      (user-print output)))
+  (driver-loop))
+
+(define (prompt-for-input string)
+  (newline) (newline) (display string) (newline))
+
+(define (announce-output string)
+  (newline) (display string) (newline))
+
+(define (user-print object)
+  (if (compound-procedure? object)
+      (display (list 'compound-procedure
+                     (procedure-parameters object)
+                     (procedure-body object)
+                     '<procedure-env>))
+      (display object)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.1.4 Test
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (driver-loop)
+;; (define (append x y) (if (null? x) y (cons (car x) (append (cdr x) y))))
+;; (append '(a b c) '(d e f))
