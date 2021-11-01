@@ -1,6 +1,6 @@
 #lang scheme
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; 4.1.1 Intepreter Kernel.
+; 4.1.1 Intepreter Kernel
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Evaluating expression.
@@ -194,4 +194,74 @@
                      (squence->exp (cond-actions first))
                      (expand-clauses rest))))))
 
-;; cond
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.1.3 Evaluater Data Structure
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (true? x) (not (false? x)))
+
+(define (false? x) (eq? x #f))
+
+;; make compound-procedure.
+(define (make-procedure parameters body env)
+  (list 'procedure parameters body env))
+
+(define (compound-procedure? p) (tagged-list? p 'procedure))
+
+(define (procedure-parameters p) (cadr p))
+
+(define (procedure-body p) (caddr p))
+
+(define (procedure-environment p) (cadddr p))
+
+;; environment: variable-value binding list.
+;;   current design is not good as environments is a link list,
+;;   it cost O(n) time to search a variable's value.
+(define (enclosing-environment env) (cdr env))
+
+(define (first-frame env) (car env))
+
+(define the-empty-environment '())
+
+(define (make-frame variables values) (cons variables values))
+
+(define (frame-variables frame) (car frame))
+
+(define (frame-values frame) (cdr frame))
+
+(define (add-binding-to-frame! var val frame)
+  (set-car! frame (cons var (frame-variables frame)))
+  (set-car! frame (cons val (frame-values frame))))
+
+(define (extend-environment vars vals base-env)
+  (if (= (length vars) (length vals))
+      (cons (make-frame vars vals) base-env)
+      (error "Error in extend-environment: not equal" vars vals)))
+
+(define (look-variable-value var env)
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ((null? vars) (env-loop (enclosing-environment env)))
+            ((eq? var (car vars)) (car vals)) ;return value.
+            (else (scan (cdr vars) (cdr vals)))))
+    (if (eq? env the-empty-environment)
+        (error "Error in look-variable-value: unbound variable" var)
+        (let ((frame (car frame)))
+          (scan (frame-variables frame) (frame-values frame)))))
+  (env-loop env))
+
+(define (set-variable-value! var val env)
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ((null? vars) (env-loop (enclosing-environment env)))
+            ((eq? var (car vars)) (set-car! vals val)) ;set new value.
+            (else (scan (cdr vars) (cdr vals)))))
+    (if (eq? env the-empty-environment)
+        (error "Error in set-variable-value!: unbound variable" var)
+        (let ((frame (car frame)))
+          (scan (frame-variables frame) (frame-values frame)))))
+  (env-loop env))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
