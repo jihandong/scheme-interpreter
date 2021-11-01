@@ -1,6 +1,9 @@
 #lang scheme
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.1.1 Intepreter Kernel.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; evaluating expression.
+;; Evaluating expression.
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
         ((variable? exp) (lookup-variable-value exp env))
@@ -40,6 +43,32 @@
       (cons (eval (car exps) env)
             (list-of-value (cdr exps) env))))
 
+(define (eval-if exp env)
+  (if (true? (eval (if-predicate exp) env))
+      (eval (if-consequent exp) env)
+      (eval (if-alternative exp) env)))
+
+(define (eval-sequence exps env)
+  (if (last-exps? exps) ;return value of last expression.
+      (eval (first-exp exps) env)
+      (eval (first-exp exps) env) (eval-sequence (rest-exps exps) env)))
+
+(define (eval-assignment exp env)
+  (set-variable! (asssignment-variable exp)
+                 (eval (assignment-value exp) env)
+                 env)
+  'ok)
+
+(define (eval-definition exp env)
+  (define-variable! (definition-variable exp)
+    (eval (definition-value exp) env)
+    env)
+  'ok)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.1.2 Expressions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;; self-evaluating expression.
 (define (self-evaluating? exp)
   (cond ((number? exp) #t)
@@ -60,12 +89,6 @@
       #f))
 
 ;; assignment expression.
-(define (eval-assignment exp env)
-  (set-variable! (asssignment-variable exp)
-                 (eval (assignment-value exp) env)
-                 env)
-  'ok)
-
 (define (assignment? exp) (tagged-list? exp 'set!))
 
 (define (assignment-variable exp) (cadr exp))
@@ -73,12 +96,6 @@
 (define (assignment-value exp) (caddr exp))
 
 ;; definition expression.
-(define (eval-definition exp env)
-  (define-variable! (definition-variable exp)
-    (eval (definition-value exp) env)
-    env)
-  'ok)
-
 (define (definition? exp) (tagged-list? exp 'define))
 
 (define (definition-variable exp)
@@ -103,11 +120,6 @@
   (list 'lambda parameters body))
 
 ;; if expression.
-(define (eval-if exp env)
-  (if (true? (eval (if-predicate exp) env))
-      (eval (if-consequent exp) env)
-      (eval (if-alternative exp) env)))
-
 (define (if? exp) (tagged-list? exp 'if))
 
 (define (if-predicate exp) (cadr exp))
@@ -123,11 +135,6 @@
   (list 'if predicate consequent alternative))
 
 ;; begin expression (sequence).
-(define (eval-sequence exps env)
-  (if (last-exps? exps) ;return value of last expression.
-      (eval (first-exp exps) env)
-      (eval (first-exp exps) env) (eval-sequence (rest-exps exps) env)))  
-  
 (define (begin? exp) (tagged-list? exp 'begin))
 
 (define (begin-actions exp) (cdr exp))
