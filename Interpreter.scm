@@ -35,13 +35,13 @@
                          arguments
                          (procedure-environment procedure))))
         (else
-         (error "Error in apply: unkown procedure type" exp))))
+         (error "Error in apply: unkown procedure type" procedure))))
 
 (define (list-of-value exps env)
-  (if (null? exps)
+  (if (no-operands? exps)
       '()
-      (cons (eval (car exps) env)
-            (list-of-value (cdr exps) env))))
+      (cons (eval (first-operand exps) env)
+            (list-of-value (rest-operand exps) env))))
 
 (define (eval-if exp env)
   (if (true? (eval (if-predicate exp) env))
@@ -73,7 +73,7 @@
 (define (self-evaluating? exp)
   (cond ((number? exp) true)
         ((string? exp) true)
-        (else #f)))
+        (else false)))
 
 ;; variable expression.
 (define (variable? exp) (symbol? exp))
@@ -99,15 +99,15 @@
 (define (definition? exp) (tagged-list? exp 'define))
 
 (define (definition-variable exp)
-  (if (symbol? (car exp))
+  (if (symbol? (cadr exp))
       (cadr exp)
-      (caddr exp)))
+      (caadr exp)))
 
 (define (definition-value exp)
   (if (symbol? (cadr exp))
       (caddr exp)
-      (make-lambda (cdadr exp)
-                   (cddr exp))))
+      (make-lambda (cdadr exp)   ;formal parameters
+                   (cddr exp)))) ;body
 
 ;; lambda expression
 (define (lambda? exp) (tagged-list? exp 'lambda))
@@ -139,7 +139,7 @@
 
 (define (begin-actions exp) (cdr exp))
 
-(define (last-exps? seq) (null? (cdr exp)))
+(define (last-exps? seq) (null? (cdr seq)))
 
 (define (first-exp seq) (car seq))
 
@@ -223,15 +223,15 @@
 
 (define the-empty-environment '())
 
-(define (make-frame variables values) (list variables values))
+(define (make-frame variables values) (cons variables values))
 
 (define (frame-variables frame) (car frame))
 
-(define (frame-values frame) (cadr frame))
+(define (frame-values frame) (cdr frame))
 
 (define (add-binding-to-frame! var val frame)
-  (set-car! (frame-variables frame) var)
-  (set-car! (frame-values frame) val))
+  (set-car! frame (cons var (frame-variables frame)))
+  (set-cdr! frame (cons val (frame-values frame))))
 
 (define (extend-environment vars vals base-env)
   (if (= (length vars) (length vals))
@@ -336,4 +336,4 @@
 
 ;; (driver-loop)
 ;; (define (append x y) (if (null? x) y (cons (car x) (append (cdr x) y))))
-;; (append '(a b c) '(d e f))
+;; (append (quote (1 2 3)) (quote (4 5 6)))
