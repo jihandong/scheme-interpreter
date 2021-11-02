@@ -10,6 +10,8 @@
         ((quoted? exp) (text-of-quotation exp))
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
+        ((and? exp) (eval-and (rules exp) env))
+        ((or? exp) (eval-or (rules exp) env))
         ((if? exp) (eval-if exp env))
         ((lambda? exp)
          (make-procedure (lambda-parameters exp)
@@ -42,6 +44,18 @@
       '()
       (cons (eval (first-operand exps) env)
             (list-of-value (rest-operand exps) env))))
+
+(define (eval-and exps env)
+  (let ((first-value (eval (first-rule exps) env)))
+    (cond ((last-rules? exps) first-value)
+          ((false? first-value) false)
+          (else (eval-and (rest-rules exps) env)))))
+
+(define (eval-or exps env)
+  (let ((first-value (eval (first-rule exps) env)))
+    (cond ((last-rules? exps) first-value)
+          ((true? first-value) true)
+          (else (eval-or (rest-rules exps) env)))))
 
 (define (eval-if exp env)
   (if (true? (eval (if-predicate exp) env))
@@ -118,6 +132,19 @@
 
 (define (make-lambda parameters body)
   (cons 'lambda (cons parameters body)))
+
+;; and/or expression
+(define (and? exp) (tagged-list? exp 'and))
+
+(define (or? exp) (tagged-list? exp 'or))
+
+(define (rules exp) (cdr exp))
+
+(define (first-rule rules) (car rules))
+
+(define (rest-rules rules) (cdr rules))
+
+(define (last-rules? rules) (null? (cdr rules)))
 
 ;; if expression.
 (define (if? exp) (tagged-list? exp 'if))
