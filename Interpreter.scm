@@ -117,7 +117,7 @@
 (define (lambda-body exp) (cddr exp))
 
 (define (make-lambda parameters body)
-  (list 'lambda parameters body))
+  (cons 'lambda (cons parameters body)))
 
 ;; if expression.
 (define (if? exp) (tagged-list? exp 'if))
@@ -283,7 +283,10 @@
         (list 'cdr cdr)
         (list 'cons cons)
         (list 'null? null?)
-        (list 'eq? eq?)))
+        (list 'eq? eq?)
+        (list '+ +)
+        (list '- -)
+        (list '* *)))
 
 (define (primitive-procedure-names)
   (map car primitive-procedure))
