@@ -3,40 +3,35 @@
 ; 4.1.1 Intepreter Kernel
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Evaluating expression.
+;; evaluating expression.
 (define (my-eval exp env)
-  (cond ((self-evaluating? exp) exp)
-        ((variable? exp) (lookup-variable-value exp env))
-        ((quoted? exp) (text-of-quotation exp))
-        ((assignment? exp) (eval-assignment exp env))
-        ((definition? exp) (eval-definition exp env))
-        ((and? exp) (eval-and (rules exp) env))
-        ((or? exp) (eval-or (rules exp) env))
-        ((if? exp) (eval-if exp env))
-        ((lambda? exp)
-         (make-procedure (lambda-parameters exp)
-                         (lambda-body exp)
-                         env))
-        ((begin? exp)
-         (eval-sequence (begin-actions exp) env))
-        ((cond? exp) (my-eval (cond->if exp) env))
-        ((application? exp)
-         (my-apply (my-eval (operator exp) env)
-                (list-of-values (operands exp) env)))
+  ((analyze exp) env))
+
+;; analysing expression.
+(define (analyze exp)
+  (cond ((self-evaluating? exp) (analyze-self-evaluating exp))
+        ((variable? exp) (analyze-vriable exp))
+        ((quoted? exp) (analyze-quoted exp))
+        ((assignment? exp) (analyze-assignment exp))
+        ((definition? exp) (analyze-definition exp))
+        ((if? exp) (analyze-if exp))
+        ((lambda? exp) (analyze-lambda exp))
+        ((begin? exp) (analyze-sequence (begin-actions exp)))
+        ((cond? exp) (analyze (cond->if exp)))
+        ((application? exp) (analyze-application exp))
         (else
          (error "Error in eval: unkown expression type" exp))))
 
-;; applying procedure.
-(define (my-apply procedure arguments)
+;; execute procedure.
+(define (execute procedure arguments)
   (cond ((primitive-procedure? procedure)
          (apply-primitive-procedure procedure arguments))
         ((compound-procedure? procedure)
-         (eval-sequence
-          (procedure-body procedure)
-          (extend-environment
-           (procedure-parameters procedure) ; variables - formal parameters.
-           arguments                        ; values    - actual parameters.
-           (procedure-environment procedure))))
+          ((procedure-body procedure)
+           (extend-environment
+            (procedure-parameters procedure) ; variables - formal parameters.
+            arguments                        ; values    - actual parameters.
+            (procedure-environment procedure))))
         (else
          (error "Error in apply: unkown procedure type" procedure))))
 
@@ -46,39 +41,66 @@
       (cons (my-eval (first-operand exps) env)
             (list-of-values (rest-operand exps) env))))
 
-(define (eval-and exps env)
-  (let ((first-value (my-eval (first-rule exps) env)))
-    (cond ((last-rules? exps) first-value)
-          ((false? first-value) false)
-          (else (eval-and (rest-rules exps) env)))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.1.7 Analyze Once Only
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (eval-or exps env)
-  (let ((first-value (my-eval (first-rule exps) env)))
-    (cond ((last-rules? exps) first-value)
-          ((true? first-value) true)
-          (else (eval-or (rest-rules exps) env)))))
+(define (analyze-self-evaluating exp) (lambda (env) exp))
 
-(define (eval-if exp env)
-  (if (true? (my-eval (if-predicate exp) env))
-      (my-eval (if-consequent exp) env)
-      (my-eval (if-alternative exp) env)))
+(define (analyze-vriable exp) (lambda (env) (lookup-variable-value exp env)))
 
-(define (eval-sequence exps env)
-  (cond ((last-exps? exps) (my-eval (first-exp exps) env))
-        (else (my-eval (first-exp exps) env)
-              (eval-sequence (rest-exps exps) env))))
+(define (analyze-quoted exp)
+  (let ((qval (text-of-quotation exp)))
+    (lambda (env) qval)))
 
-(define (eval-assignment exp env)
-  (set-variable-value! (assignment-variable exp)
-                       (my-eval (assignment-value exp) env)
-                       env)
-  'ok)
+(define (analyze-assignment exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze (assignment-value exp))))
+    (lambda (env)
+      (set-variable-value! var (vproc env) env)
+      'ok)))
 
-(define (eval-definition exp env)
-  (define-variable! (definition-variable exp)
-    (my-eval (definition-value exp) env)
-    env)
-  'ok)
+(define (analyze-definition exp)
+  (let ((var (definition-variable exp))
+        (vproc (analyze (definition-value exp))))
+    (lambda (env)
+      (define-variable! var (vproc env) env)
+      'ok)))
+
+(define (analyze-if exp)
+  (let ((pproc (analyze (if-predicate exp)))
+        (cproc (analyze (if-consequent exp)))
+        (aproc (analyze (if-alternative exp))))
+    (lambda (env)
+      (if (true? (pproc env))
+          (cproc env)
+          (aproc env)))))
+
+(define (analyze-lambda exp)
+  (let ((vars (lambda-parameters exp))
+        (bproc (analyze-sequence (lambda-body exp))))
+    (lambda (env) (make-procedure vars bproc env))))
+
+(define (analyze-sequence exps)
+  (define (sequentially proc1 proc2)
+    (lambda (env) (proc1 env) (proc2 env)))
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+        first-proc
+        (loop (sequentially first-proc (car rest-procs))
+              (cdr rest-procs))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+        (error "Error in analyze-sequence: empty sequence"))
+    (loop (car procs) (cdr procs))))
+
+(define (analyze-application exp)
+  (let ((fproc (analyze (operator exp)))
+        (aprocs (map analyze (operands exp))))
+    (lambda (env)
+      (execute (fproc env)
+               (map (lambda (aproc) (aproc env))
+                    aprocs)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.2 Expressions
@@ -133,19 +155,6 @@
 
 (define (make-lambda parameters body)
   (cons 'lambda (cons parameters body)))
-
-;; and/or expression
-(define (and? exp) (tagged-list? exp 'and))
-
-(define (or? exp) (tagged-list? exp 'or))
-
-(define (rules exp) (cdr exp))
-
-(define (first-rule rules) (car rules))
-
-(define (rest-rules rules) (cdr rules))
-
-(define (last-rules? rules) (null? (cdr rules)))
 
 ;; if expression.
 (define (if? exp) (tagged-list? exp 'if))
@@ -367,6 +376,6 @@
 ; 4.1.4 Test
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; (driver-loop)
+(driver-loop)
 ;; (define (append x y) (if (null? x) y (cons (car x) (append (cdr x) y))))
-;; (append (quote (1 2 3)) (quote (4 5 6)))
+;; (append '(1 2 3) '(4 5 6))
