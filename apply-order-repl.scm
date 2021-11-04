@@ -360,7 +360,8 @@
         (list '- -)
         (list '* *)
         (list '/ /)
-        (list '= =)))
+        (list '= =)
+        (list 'display display)))
 
 (define (primitive-procedure-names)
   (map car primitive-procedure))
@@ -412,5 +413,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (driver-loop)
+;; (and (begin (display 1) true) (begin (display 1) true))
+;; (and (begin (display 1) false) (begin (display 1) true))
+;; (or (begin (display 1) true) (begin (display 1) true))
+;; (or (begin (display 1) false) (begin (display 1) true))
 ;; (define (append x y) (if (null? x) y (cons (car x) (append (cdr x) y))))
 ;; (append '(1 2 3) '(4 5 6))
