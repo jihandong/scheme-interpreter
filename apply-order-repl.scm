@@ -22,7 +22,7 @@
         ((cond? exp) (my-eval (cond->if exp) env))
         ((application? exp)
          (my-apply (my-eval (operator exp) env)
-                (list-of-value (operands exp) env)))
+                (list-of-values (operands exp) env)))
         (else
          (error "Error in eval: unkown expression type" exp))))
 
@@ -40,11 +40,11 @@
         (else
          (error "Error in apply: unkown procedure type" procedure))))
 
-(define (list-of-value exps env)
+(define (list-of-values exps env)
   (if (no-operands? exps)
       '()
       (cons (my-eval (first-operand exps) env)
-            (list-of-value (rest-operand exps) env))))
+            (list-of-values (rest-operand exps) env))))
 
 (define (eval-and exps env)
   (let ((first-value (my-eval (first-rule exps) env)))
@@ -314,7 +314,9 @@
         (list 'eq? eq?)
         (list '+ +)
         (list '- -)
-        (list '* *)))
+        (list '* *)
+        (list '/ /)
+        (list '= =)))
 
 (define (primitive-procedure-names)
   (map car primitive-procedure))

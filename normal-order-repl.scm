@@ -21,45 +21,48 @@
          (eval-sequence (begin-actions exp) env))
         ((cond? exp) (my-eval (cond->if exp) env))
         ((application? exp)
-         (my-apply (my-eval (operator exp) env)
-                (list-of-value (operands exp) env)))
+         (my-apply (actual-value (operator exp) env)
+            (operands exp)
+            env))
         (else
          (error "Error in eval: unkown expression type" exp))))
 
 ;; applying procedure.
-(define (my-apply procedure arguments)
+(define (my-apply procedure arguments env)
   (cond ((primitive-procedure? procedure)
-         (apply-primitive-procedure procedure arguments))
+         (apply-primitive-procedure
+          procedure
+          (list-of-arg-values arguments env)))
         ((compound-procedure? procedure)
          (eval-sequence
           (procedure-body procedure)
           (extend-environment
-           (procedure-parameters procedure) ; variables - formal parameters.
-           arguments                        ; values    - actual parameters.
+           (procedure-parameters procedure)     ; formal parameters.
+           (list-of-delayed-args arguments env) ; actual parameters.
            (procedure-environment procedure))))
         (else
          (error "Error in apply: unkown procedure type" procedure))))
 
-(define (list-of-value exps env)
+(define (list-of-values exps env)
   (if (no-operands? exps)
       '()
       (cons (my-eval (first-operand exps) env)
-            (list-of-value (rest-operand exps) env))))
+            (list-of-values (rest-operand exps) env))))
 
 (define (eval-and exps env)
-  (let ((first-value (my-eval (first-rule exps) env)))
+  (let ((first-value (actual-value (first-rule exps) env)))
     (cond ((last-rules? exps) first-value)
           ((false? first-value) false)
           (else (eval-and (rest-rules exps) env)))))
 
 (define (eval-or exps env)
-  (let ((first-value (my-eval (first-rule exps) env)))
+  (let ((first-value (actual-value (first-rule exps) env)))
     (cond ((last-rules? exps) first-value)
           ((true? first-value) true)
           (else (eval-or (rest-rules exps) env)))))
 
 (define (eval-if exp env)
-  (if (true? (my-eval (if-predicate exp) env))
+  (if (true? (actual-value (if-predicate exp) env))
       (my-eval (if-consequent exp) env)
       (my-eval (if-alternative exp) env)))
 
@@ -79,6 +82,46 @@
     (my-eval (definition-value exp) env)
     env)
   'ok)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 4.2.2 Lazy Evaluation & Thunk
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (actual-value exp env) (force-it (my-eval exp env)))
+
+(define (list-of-arg-values exps env)
+  (if (no-operands? exps)
+      '()
+      (cons (actual-value (first-operand exps) env)
+            (list-of-arg-values (rest-operand exps) env))))
+
+(define (list-of-delayed-args exps env)
+  (if (no-operands? exps)
+      '()
+      (cons (delay-it (first-operand exps) env)
+            (list-of-delayed-args (rest-operand exps) env))))
+
+(define (delay-it exp env) (list 'thunk exp env))
+
+(define (thunk? obj) (tagged-list? obj 'thunk))
+
+(define (thunk-exp thunk) (cadr thunk))
+
+(define (thunk-env thunk) (caddr thunk))
+
+(define (evaluated-thunk? obj) (tagged-list? obj 'evaluated-thunk))
+
+(define (thunk-value evaluated-thunk) (cadr evaluated-thunk))
+
+(define (force-it obj)
+  (cond ((thunk? obj)
+         (let ((result (actual-value (thunk-exp obj) (thunk-env obj))))
+           (set-car! obj 'evaluated-thunk)
+           (set-car! (cdr obj) result) ;replace thunk-exp with value.
+           (set-cdr! (cdr obj) '()) ;discard thunk-env.
+           result))
+        ((evaluated-thunk? obj) (thunk-value obj))
+        (else obj)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.2 Expressions
@@ -314,7 +357,9 @@
         (list 'eq? eq?)
         (list '+ +)
         (list '- -)
-        (list '* *)))
+        (list '* *)
+        (list '/ /)
+        (list '= =)))
 
 (define (primitive-procedure-names)
   (map car primitive-procedure))
@@ -342,7 +387,7 @@
 (define (driver-loop)
   (prompt-for-input input-prompt)
   (let ((input (read)))
-    (let ((output (my-eval input the-global-environment)))
+    (let ((output (actual-value input the-global-environment)))
       (announce-output output-prompt)
       (user-print output)))
   (driver-loop))
@@ -366,5 +411,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; (driver-loop)
-;; (define (append x y) (if (null? x) y (cons (car x) (append (cdr x) y))))
-;; (append (quote (1 2 3)) (quote (4 5 6)))
+;; (define (try a b) (if (= a 0) a b))
+;; (try 0 (/ 1 0))
