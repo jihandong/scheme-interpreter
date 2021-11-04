@@ -37,12 +37,6 @@
         (else
          (error "Error in apply: unkown procedure type" procedure))))
 
-(define (list-of-values exps env)
-  (if (no-operands? exps)
-      '()
-      (cons (my-eval (first-operand exps) env)
-            (list-of-values (rest-operand exps) env))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.7 Analyze Once Only
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -249,7 +243,7 @@
                (expand-and-sequence (cdr seq))
                'false)))
 
-;; and expression
+;; or expression
 (define (or? exp) (tagged-list? exp 'or))
 
 (define (or-sequence exp) (cdr exp))

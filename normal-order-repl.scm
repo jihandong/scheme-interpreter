@@ -18,6 +18,8 @@
         ((begin? exp)
          (eval-sequence (begin-actions exp) env))
         ((cond? exp) (my-eval (cond->if exp) env))
+        ((and? exp) (my-eval (and->if exp)))
+        ((or? exp) (my-eval (or->if exp)))
         ((application? exp)
          (my-apply (actual-value (operator exp) env)
             (operands exp)
@@ -237,6 +239,40 @@
             (make-if (cond-predicate first)
                      (sequence->exp (cond-actions first))
                      (expand-clauses rest))))))
+
+;; and expression
+(define (and? exp) (tagged-list? exp 'and))
+
+(define (and-sequence exp) (cdr exp))
+
+(define (and->if exp)
+  (if (null? (and-sequence exp))
+      (error "Error in and->if: empty sequence")
+      (expand-and-sequence (and-sequence exp))))
+
+(define (expand-and-sequence seq)
+  (if (null? seq)
+      'true
+      (make-if (car seq)
+               (expand-and-sequence (cdr seq))
+               'false)))
+
+;; or expression
+(define (or? exp) (tagged-list? exp 'or))
+
+(define (or-sequence exp) (cdr exp))
+
+(define (or->if exp)
+  (if (null? (or-sequence exp))
+      (error "Error in or->if: empty sequence")
+      (expand-or-sequence (or-sequence exp))))
+
+(define (expand-or-sequence seq)
+  (if (null? seq)
+      'false
+      (make-if (car seq)
+               'true
+               (expand-or-sequence (or seq)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.3 Evaluater Data Structure
