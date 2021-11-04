@@ -18,6 +18,8 @@
         ((lambda? exp) (analyze-lambda exp))
         ((begin? exp) (analyze-sequence (begin-actions exp)))
         ((cond? exp) (analyze (cond->if exp)))
+        ((and? exp) (analyze (and->if exp)))
+        ((or? exp) (analyze (or->if exp)))
         ((application? exp) (analyze-application exp))
         (else
          (error "Error in eval: unkown expression type" exp))))
@@ -214,8 +216,7 @@
 
 (define (cond-actions clause) (cdr clause))
 
-(define (cond->if exp)
-  (expand-clauses (cond-clauses exp)))
+(define (cond->if exp) (expand-clauses (cond-clauses exp)))
 
 (define (expand-clauses clauses)
   (if (null? clauses)
@@ -230,6 +231,40 @@
             (make-if (cond-predicate first)
                      (sequence->exp (cond-actions first))
                      (expand-clauses rest))))))
+
+;; and expression
+(define (and? exp) (tagged-list? exp 'and))
+
+(define (and-sequence exp) (cdr exp))
+
+(define (and->if exp)
+  (if (null? (and-sequence exp))
+      (error "Error in and->if: empty sequence")
+      (expand-and-sequence (and-sequence exp))))
+
+(define (expand-and-sequence seq)
+  (if (null? seq)
+      'true
+      (make-if (car seq)
+               (expand-and-sequence (cdr seq))
+               'false)))
+
+;; and expression
+(define (or? exp) (tagged-list? exp 'or))
+
+(define (or-sequence exp) (cdr exp))
+
+(define (or->if exp)
+  (if (null? (or-sequence exp))
+      (error "Error in or->if: empty sequence")
+      (expand-or-sequence (or-sequence exp))))
+
+(define (expand-or-sequence seq)
+  (if (null? seq)
+      'false
+      (make-if (car seq)
+               'true
+               (expand-or-sequence (or seq)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 4.1.3 Evaluater Data Structure
