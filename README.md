@@ -1,5 +1,7 @@
 # schemer
 
+![image](https://github.com/jihandong/scheme-interpreter/blob/main/pic/sicp-is-good.jpg)
+
 ## scheme十戒
 1. 递归时的模式匹配：
    - 递归数字时，应该判断`(zero? n)`和`else`。
